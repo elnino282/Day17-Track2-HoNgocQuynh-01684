@@ -63,27 +63,44 @@ def main() -> int:
     n_src = len(list(SRC.glob("*.parquet")))
     print(f"  nguồn : {SRC}  ({n_src:,} file)")
 
-    # TODO(nhiệm vụ 4): hiện thực khung COPY ... TO ... ở phần docstring.
-    #
-    #   con.execute(f"""
-    #       copy (
-    #           select * from read_parquet('{SRC}/*.parquet')
-    #           order by ...
-    #       ) to '{DST}' (
-    #           format parquet,
-    #           partition_by (...),
-    #           overwrite_or_ignore,
-    #           row_group_size ...
-    #       )
-    #   """)
-    #
-    # Sau đó kiểm tra không mất hàng nào:
-    #
-    #   assert <số row dataset cũ> == <số row dataset mới>
+    if n_src == 0:
+        raise FileNotFoundError(
+            f"không tìm thấy dữ liệu nguồn trong {SRC}; hãy chạy `make seed-extra`"
+        )
 
-    print("\n  tools/compact.py chưa được hiện thực — đây là nhiệm vụ 4.")
-    print("  Mở file này, đọc phần KHUNG THỰC HIỆN ở đầu file và điền vào TODO.")
-    print("  Hướng dẫn từng bước: GUIDE.md mục 4.\n")
+    # event_date có cardinality thấp (14 ngày) và là điều kiện lọc của
+    # dashboard, nên đưa nó vào path để DuckDB loại partition trước khi mở file.
+    # Trong từng partition, customer_name được gom liền nhau để min/max của row
+    # group có thể loại phần không thuộc khách hàng cần tìm. Row group 2.048 hàng
+    # đủ nhỏ so với khoảng 9.000 event/ngày để việc sắp xếp này có tác dụng.
+    con.execute(f"""
+        copy (
+            select
+                *,
+                cast(event_time as date) as event_date
+            from read_parquet('{SRC}/*.parquet')
+            order by event_date, customer_name
+        ) to '{DST}' (
+            format parquet,
+            partition_by (event_date),
+            overwrite_or_ignore,
+            row_group_size 2048
+        )
+    """)
+
+    n_old = con.execute(
+        f"select count(*) from read_parquet('{SRC}/*.parquet')"
+    ).fetchone()[0]
+    n_new = con.execute(
+        f"select count(*) from read_parquet('{DST}/**/*.parquet', "
+        "hive_partitioning = true)"
+    ).fetchone()[0]
+    assert n_old == n_new, f"mất dữ liệu khi compact: {n_old:,} != {n_new:,}"
+
+    n_dst = len(list(DST.glob("**/*.parquet")))
+    print(f"  đích  : {DST}  ({n_dst:,} file)")
+    print(f"  số hàng: {n_old:,} -> {n_new:,} (không đổi)\n")
+    con.close()
     return 0
 
 
