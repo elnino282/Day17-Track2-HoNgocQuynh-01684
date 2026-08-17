@@ -1,6 +1,6 @@
 # Báo cáo LAB 17 — Data Pipeline Engineering
 
-**Họ tên:** ____________________  **Lớp:** AICB-P2T2  **Ngày:** 2026-08-17
+**Họ tên:** Hồ Ngọc Quỳnh  **Lớp:** AICB-P2T2  **Ngày:** 2026-08-17
 
 ## 0 · Kết quả `make verify`
 
